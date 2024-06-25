@@ -4,6 +4,7 @@ const pendingOrderService = require("../service/pendingOrder/pendingOrderService
 const axios = require("axios");
 const marketPriceService = require("../service/marketPriceOrder/marketPriceOrder");
 const stockPriceService = require("../service/stockPrice/stockPrice");
+const fs = require("fs");
 require("dotenv").config();
 
 router.post("/krStock", async function (req, res) {
@@ -86,6 +87,69 @@ router.post("/stt", async function (req, res) {
     }
     return null;
   }
+});
+
+router.post("/json", async function (req, res) {
+  class CompletionExecutor {
+    constructor() {
+      this.host = process.env.CHAT_HOST;
+      this.apiKey = process.env.CHAT_APIKEY;
+      this.apiKeyPrimaryVal = process.env.CHAT_APIKEYPRIMARYVAL;
+      this.requestId = process.env.CHAT_REQUESTID;
+    }
+
+    async execute(completionRequest) {
+      const headers = {
+        "X-NCP-CLOVASTUDIO-API-KEY": this.apiKey,
+        "X-NCP-APIGW-API-KEY": this.apiKeyPrimaryVal,
+        "X-NCP-CLOVASTUDIO-REQUEST-ID": this.requestId,
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "text/event-stream",
+      };
+      try {
+        const response = await axios.post(
+          `${this.host}/testapp/v1/tasks/bjleehl4/chat-completions`,
+          completionRequest,
+          { headers, responseType: "stream" }
+        );
+
+        //여기 부분 데이터 처리하는 부분 -----
+        response.data.on("data", (chunk) => {
+          const result = chunk.toString("utf-8");
+          try {
+            if (result) {
+              const message = JSON.parse(result.split("data:")[1]);
+              if (message.message.content.includes("item")) {
+                console.log(message.message.content);
+              }
+            }
+          } catch (err) {
+            console.log("불가");
+          }
+        });
+      } catch (error) {
+        console.error("Error message:", error.message);
+      }
+    }
+  }
+  const completionExecutor = new CompletionExecutor();
+  const presetText = [
+    { role: "system", content: "" },
+    { role: "user", content: req.body.text }, //여기에 사용자 메세지가 들어가야 함. 여기만 바뀌면 됨
+  ];
+  const requestData = {
+    messages: presetText,
+    topP: 0.8,
+    topK: 0,
+    maxTokens: 256,
+    temperature: 0.5,
+    repeatPenalty: 5.0,
+    stopBefore: [],
+    includeAiFilters: true,
+    seed: 0,
+  };
+
+  completionExecutor.execute(requestData).then((data) => {});
 });
 
 module.exports = router;
